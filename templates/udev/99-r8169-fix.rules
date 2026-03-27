@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/99-r8169-fix.rules
+#
+# Immediately applies TX queue and offload fixes the instant the r8169 NIC
+# appears (nic0 add event). This is Layer 2 of the three-layer r8169 fix —
+# it acts before any service can depend on the interface being stable.
+#
+# To apply: udevadm control --reload-rules && udevadm trigger
+# To verify: udevadm test /sys/class/net/nic0 2>&1 | grep RUN
+
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="nic0", \
+  RUN+="/sbin/ip link set nic0 txqueuelen 10000", \
+  RUN+="/sbin/ethtool -K nic0 tso off gso off gro off lro off rx off tx off"
+
+# Replace "nic0" with your actual NIC name if different.
+# To find your NIC name: ip link show | grep -E '^[0-9]+:'

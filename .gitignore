@@ -1,0 +1,37 @@
+# Secrets and environment
+configs/env
+.env
+*.env
+!*.env.example
+!configs/env.example
+
+# Credentials
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+rclone.conf
+authkey
+
+# Proxmox-specific (never commit)
+/etc/corosync/authkey
+**/corosync.conf
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+Thumbs.db
+
+# Logs
+*.log
+/var/log/
+
+# Python / Node artifacts (if any tools included)
+__pycache__/
+node_modules/
+.npm/
+

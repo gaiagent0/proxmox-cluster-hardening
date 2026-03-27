@@ -1,0 +1,18 @@
+[Unit]
+Description=r8169 driver reload before networking (TX watchdog prevention)
+DefaultDependencies=no
+Before=networking.service ifupdown2.service
+After=sysinit.target kmod.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+# Unload and reload the r8169 driver to clear any stale PHY state
+ExecStart=/sbin/modprobe -r r8169
+ExecStart=/bin/sleep 2
+ExecStart=/sbin/modprobe r8169
+# Wait up to 20 s for nic0 to appear — fail gracefully if hardware absent
+ExecStart=/bin/bash -c 'for i in $(seq 1 20); do ip link show nic0 &>/dev/null && exit 0; sleep 1; done; exit 1'
+
+[Install]
+WantedBy=sysinit.target

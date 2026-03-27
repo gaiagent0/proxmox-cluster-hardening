@@ -1,0 +1,19 @@
+[Unit]
+Description=r8169 TX queue length and offload fix (post-networking)
+After=networking.service sys-subsystem-net-devices-nic0.device
+Wants=sys-subsystem-net-devices-nic0.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+# Increase TX queue to prevent watchdog timeouts under load
+ExecStart=/sbin/ip link set nic0 txqueuelen 10000
+# Disable all offloads known to trigger r8169 TX deadlock on 6.8+ kernels
+ExecStart=/sbin/ethtool -K nic0 tso off gso off gro off lro off rx off tx off
+# Re-attach NIC to bridge in case networking.service ran with nic0 absent
+ExecStart=/sbin/ip link set nic0 master vmbr0
+# Reload all interfaces to pick up any missed VLAN config
+ExecStart=/usr/sbin/ifreload -a
+
+[Install]
+WantedBy=multi-user.target

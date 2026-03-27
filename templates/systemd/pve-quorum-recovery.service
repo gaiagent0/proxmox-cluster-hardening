@@ -1,0 +1,26 @@
+[Unit]
+Description=PVE Quorum Auto-Recovery (single-node boot)
+# Runs after corosync has had a chance to start and attempt to form quorum
+After=corosync.service pve-cluster.service
+Requires=corosync.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+# Wait for other nodes to potentially join before intervening
+ExecStartPre=/bin/sleep 30
+ExecStart=/bin/bash -c '\
+  QUORATE=$(pvecm status 2>/dev/null | grep "Quorate:" | awk "{print \$2}"); \
+  VOTES=$(pvecm status 2>/dev/null | grep "Total votes:" | awk "{print \$3}"); \
+  if [ "$QUORATE" = "No" ] && [ "${VOTES:-0}" -lt 2 ]; then \
+    logger -t pve-quorum-recovery "Only ${VOTES} vote(s) — setting expected=1 to unblock LXC startup"; \
+    pvecm expected 1; \
+  else \
+    logger -t pve-quorum-recovery "Quorum OK (votes=${VOTES}, quorate=${QUORATE}) — no action needed"; \
+  fi'
+
+# Note: when the other nodes rejoin, pvecm expected resets automatically.
+# This is safe — it cannot cause split-brain with the quorum device model.
+
+[Install]
+WantedBy=multi-user.target

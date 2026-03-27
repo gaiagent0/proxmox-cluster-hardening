@@ -1,0 +1,12 @@
+[Unit]
+Description=Disable EEE on primary NIC
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+# Replace nic0 with your NIC name (ip link show)
+ExecStart=/sbin/ethtool --set-eee nic0 eee off
+
+[Install]
+WantedBy=multi-user.target
