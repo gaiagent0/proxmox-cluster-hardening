@@ -1,8 +1,8 @@
-#!/bin/bash
+﻿#!/bin/bash
 # ============================================================
 # PVE Boot Check — 15-assertion cluster health verification
 # Run on pve-01 as root after any cluster reboot.
-# Source: https://github.com/YOUR_USER/proxmox-cluster-hardening
+# Source: https://github.com/gaiagent0/proxmox-cluster-hardening
 # ============================================================
 
 set -uo pipefail

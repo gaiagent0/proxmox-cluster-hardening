@@ -1,9 +1,9 @@
-#!/bin/bash
+﻿#!/bin/bash
 # ============================================================
 # PVE Homelab – Ordered Cluster Reboot Script v2
 # Run on pve-01 as root: bash pve-cluster-reboot.sh
 # ============================================================
-# Source: https://github.com/YOUR_USER/proxmox-cluster-hardening
+# Source: https://github.com/gaiagent0/proxmox-cluster-hardening
 # ============================================================
 
 set -euo pipefail

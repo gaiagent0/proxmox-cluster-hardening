@@ -1,4 +1,4 @@
-# proxmox-cluster-hardening
+﻿# proxmox-cluster-hardening
 
 > **Boot-stability hardening for a 3-node Proxmox VE cluster on mini-PC hardware.**  
 > Covers Intel e1000e EEE bugs, Realtek r8169 TX-queue deadlocks, quorum auto-recovery, ordered reboot automation, and a post-boot health-check script.
@@ -41,7 +41,7 @@ Adapt IP addresses and node roles to your environment. See [docs/variables.md](d
 
 ```bash
 # 1. Clone on pve-01
-git clone https://github.com/YOUR_USER/proxmox-cluster-hardening.git
+git clone https://github.com/gaiagent0/proxmox-cluster-hardening.git
 cd proxmox-cluster-hardening
 
 # 2. Edit environment variables
