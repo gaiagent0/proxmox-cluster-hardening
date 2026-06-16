@@ -1,11 +1,11 @@
-﻿# proxmox-cluster-hardening
+# proxmox-cluster-hardening
 
 > **Boot-stability hardening for a 3-node Proxmox VE cluster on mini-PC hardware.**  
 > Covers Intel e1000e EEE bugs, Realtek r8169 TX-queue deadlocks, quorum auto-recovery, ordered reboot automation, and a post-boot health-check script.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PVE](https://img.shields.io/badge/Proxmox_VE-8.x-orange)](https://www.proxmox.com)
-[![Kernel](https://img.shields.io/badge/Kernel-6.8%2B-green)](https://kernel.org)
+[![Kernel](https://img.shields.io/badge/Kernel-6.17.x-green)](https://kernel.org)
 
 ---
 
@@ -16,7 +16,7 @@ Mini-PC Proxmox clusters (e.g. N100/N305/Ryzen) share a common failure pattern a
 | Root cause | Symptom | Affected hardware |
 |---|---|---|
 | Intel e1000e EEE bug | NIC retrains to 10 Mbps after reboot | I219-LM/V, I211-AT |
-| Realtek r8169 TX watchdog deadlock | NIC disappears after networking.service race | RTL8111/8168 (kernel 6.8+) |
+| Realtek r8169 TX watchdog deadlock | NIC disappears after networking.service race | RTL8111/8168 (kernel 6.16+) |
 | Corosync `config_version` drift | Node refuses to rejoin cluster | All nodes |
 | Single-node boot without quorum | All LXCs blocked at startup | All nodes |
 | LXC `onboot` not set | Services silently absent after reboot | Any node |
@@ -28,10 +28,15 @@ This repo eliminates all five failure modes via persistent systemd services, ude
 ## Cluster Topology (reference)
 
 ```
-pve-01  10.10.40.11   Intel e1000e   Master / CT: adguard, npm, tailscale, vaultwarden, librenms
-pve-02  10.10.40.12   Intel e1000e   Backup / CT: pbs-server, grafana, rclone-sync
-pve-03  10.10.40.13   Realtek r8169  Lab    / CT: docker-host, dev-environment
+pve-01  10.10.40.11   Intel e1000e   Master / CT: adguard(101), npm(105), tailscale(106),
+                                               vaultwarden(107), librenms(203)
+pve-02  10.10.40.12   Intel e1000e   Backup / CT: pbs-server(201), rclone-sync(204), grafana(208)
+pve-03  10.10.40.13   Realtek r8169  Lab    / CT: docker-host(302), dev-environment(303),
+                                               pve-ai-agent(304)
 ```
+
+Corosync ring: VLAN99 `10.10.99.x/24` (isolated, no router).  
+MGMT network: VLAN40 `10.10.40.x/24`.
 
 Adapt IP addresses and node roles to your environment. See [docs/variables.md](docs/variables.md).
 
@@ -117,11 +122,13 @@ systemctl daemon-reload
 systemctl enable --now disable-eee.service
 ```
 
+> **Note:** The `disable-eee.service` re-applies on every boot but does **not** re-apply on link-up events (e.g. after a switch reboot). A systemd link monitor is the recommended improvement for this edge case.
+
 See [docs/eee-fix.md](docs/eee-fix.md) for full diagnosis and verification steps.
 
 ### 2. Realtek r8169 Three-Layer Fix
 
-**Problem:** r8169 on kernel 6.8+ enters a TX watchdog deadlock during boot if `networking.service` starts before the NIC is stable. The r8168-dkms alternative does not compile on kernel 6.8+ (API breaking changes in `from_timer()`/`skb_gso_segment`). Long-term fix: replace with an Intel I210-AT PCIe NIC (~€10).
+**Problem:** r8169 on kernel 6.16+ enters a TX watchdog deadlock during boot if `networking.service` starts before the NIC is stable. The `r8168-dkms` alternative **does not compile on kernel 6.17.x** — the `from_timer()` API and `skb_gso_segment` were removed upstream. Long-term fix: replace with an Intel I210-AT PCIe NIC (~€10).
 
 **Workaround (three independent layers):**
 
@@ -134,6 +141,8 @@ See [docs/eee-fix.md](docs/eee-fix.md) for full diagnosis and verification steps
 ```bash
 bash scripts/apply-r8169-fix.sh root@PVE03_IP
 ```
+
+**Permanent fix:** Intel I210-AT PCIe x1 NIC (~€10). Eliminates all r8169 workarounds.
 
 ### 3. Quorum Auto-Recovery
 
@@ -163,6 +172,28 @@ Includes interactive confirmation prompts and automatic corosync restart if a no
 
 ---
 
+## CT Startup Order Reference
+
+Correct `onboot` and startup ordering prevents service dependency races:
+
+| Node | CT | Service | order | up |
+|---|---|---|---|---|
+| pve-01 | 101 | adguard | 10 | 60 |
+| pve-01 | 106 | tailscale | 20 | 30 |
+| pve-01 | 107 | vaultwarden | 30 | 20 |
+| pve-01 | 105 | npm | 40 | 20 |
+| pve-01 | 203 | librenms | 50 | 30 |
+| pve-02 | 201 | pbs-server | 10 | 60 |
+| pve-02 | 204 | rclone-sync | 20 | 30 |
+| pve-02 | 208 | grafana | 30 | 20 |
+| pve-03 | 302 | docker-host | 10 | 60 |
+| pve-03 | 303 | dev-environment | 20 | 30 |
+| pve-03 | 304 | pve-ai-agent | 30 | 30 |
+
+> **Critical:** CT101 (adguard) requires `up=60` — dependent containers must not race ahead of DNS readiness.
+
+---
+
 ## Security Notes
 
 - Scripts use `ssh -o StrictHostKeyChecking=no` for automation convenience — replace with proper host-key pinning in production.
@@ -176,6 +207,8 @@ Includes interactive confirmation prompts and automatic corosync restart if a no
 | Issue | Status | Mitigation |
 |---|---|---|
 | r8169 fix is a workaround | Hardware dependent | Replace NIC: Intel I210-AT PCIe ~€10 |
+| r8168-dkms incompatible with kernel 6.17.x | Upstream API break | NIC replacement is only permanent fix |
+| e1000e EEE not re-applied on link-up events | Service limitation | systemd link monitor (open item) |
 | boot-check must run from pve-01 | Ops limitation | Add systemd timer for auto-run |
 | Corosync sync is manual pre-reboot | Ops | `pve-cluster-reboot.sh` automates this |
 
@@ -189,4 +222,5 @@ Includes interactive confirmation prompts and automatic corosync restart if a no
 
 ---
 
-*Tested on: Proxmox VE 8.3, kernel 6.8.12-4-pve / 6.17.x-pve | Intel N100 / N305 mini-PCs*
+*Tested on: Proxmox VE 8.3–8.4, kernel 6.17.x-pve | Intel N100 / N305 / AMD Ryzen Embedded mini-PCs*  
+*Last updated: 2026-06*
